@@ -113,7 +113,7 @@ byte color_values[color::COLOR_COUNT][3] =
 {
   {0, 0, 0}, // off
   {255, 0,  0}, // red
-  {255, 127, }, // orange
+  {255, 127, 0}, // orange
   {255, 255, 0}, // yellow
   {127, 255, 0}, // chartreuse
   {0, 255, 0}, // green
