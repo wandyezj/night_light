@@ -27,21 +27,20 @@ import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBarChangeListener, Switch.OnClickListener, SensorEventListener, GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
 
+    // Main color controls
     private SeekBar seekbar_color_selector;
     private TextView textview_selected_color;
     private TextView textview_status;
-    private View view_blink_control;
 
+    // Gyroscope control (technically uses the gravity sensor)
     private Switch switch_color_gyroscope_on;
-
     private SensorManager sensor_manager;
-    private Sensor sensor_gyro;
     private Sensor sensor_gravity;
 
+    // Double Tap blink
+    private View view_blink_control;
     private GestureDetector  gesture_detector;
-
     Animation blink_animation;
-    ScheduledThreadPoolExecutor scheduled_executor = new ScheduledThreadPoolExecutor(1);
 
     String color_name[] =
     {
@@ -80,8 +79,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     };
 
 
-
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,37 +97,12 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
         // See https://developer.android.com/guide/topics/sensors/sensors_motion.html
         sensor_manager = (SensorManager) this.getSystemService(Context.SENSOR_SERVICE);
-        sensor_gyro= sensor_manager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-        sensor_gravity= sensor_manager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+        sensor_gravity = sensor_manager.getDefaultSensor(Sensor.TYPE_GRAVITY);
 
         sensor_manager.registerListener(this, sensor_gravity, SensorManager.SENSOR_DELAY_NORMAL);
 
-
-        //View myView = findViewById(R.id.main_view);
-        /*
-        myView.setOnTouchListener(new View .OnTouchListener() {
-            public boolean onTouch(View v, MotionEvent event) {
-                Log.i("Touch", "onTouch");
-                // ... Respond to touch events
-                return true;
-            }
-        });
-*/
         gesture_detector = new GestureDetector(MainActivity.this, MainActivity.this);
-
-        //gesture_detector_compact = new GestureDetectorCompat(myView.getContext(), this);
         gesture_detector.setOnDoubleTapListener(this);
-
-        /*
-        //https://developer.android.com/reference/java/util/concurrent/ScheduledThreadPoolExecutor
-        scheduled_executor.scheduleAtFixedRate(new Runnable() {
-            @Override
-            public void run() {
-                blink();
-            }
-        }, 0 , 1000, TimeUnit.MILLISECONDS);
-        */
-
 
         blink_animation = new AlphaAnimation(0.0f, 1.0f);
         blink_animation.setDuration(1000); //You can manage the blinking time with this parameter
@@ -143,47 +115,58 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
 
     private void toggleBlink() {
+        if (is_light_on) {
 
-        is_blinking = !is_blinking;
+            is_blinking = !is_blinking;
 
-        if (is_blinking){
-            view_blink_control.setBackgroundColor(current_color);
-            view_blink_control.startAnimation(blink_animation);
-        }else {
-            blink_animation.cancel();
-            view_blink_control.setBackgroundColor(Color.BLACK);
-        }
-
-        blink(is_blinking);
-    }
-
-    private void blink(boolean do_blink) {
-        // TODO: Communicate across bluetooth to the light to set the blink
-    }
-
-    /*
-    boolean blink_on = false;
-    private void blink() {
-        Log.i("Blink", "blink called");
-        if (is_blinking){
-
-            blink_on = !blink_on;
-            if (blink_on)
-            {
-                view_blink_control.setBackgroundColor(current_color);
-            }
-            else
-            {
-                view_blink_control.setBackgroundColor(Color.BLACK);
+            if (is_blinking) {
+                setBlinkOn();
+            } else {
+                setBlinkOff();
             }
 
         } else {
-            view_blink_control.setBackgroundColor(Color.BLACK);
+            is_blinking = false;
         }
-    }
-    */
 
+    }
+
+    private void setBlinkOn(){
+        view_blink_control.setBackgroundColor(current_color);
+        view_blink_control.startAnimation(blink_animation);
+        is_blinking = true;
+        setBluetoothBlinkOn();
+    }
+
+    private void setBlinkOff() {
+        blink_animation.cancel();
+        view_blink_control.setBackgroundColor(Color.BLACK);
+        is_blinking = false;
+        setBluetoothBlinkOff();
+    }
+
+    private void setBluetoothBlinkOn() {
+        // TODO: Communicate across bluetooth to the light to set the blink
+    }
+
+    private void setBluetoothBlinkOff() {
+        // TODO: Communicate across bluetooth to the light to set the blink
+    }
+
+    private void setBluetoothColor(int r, int g, int b) {
+        // TODO: Communicate across bluetooth to the light to set the color
+    }
+
+
+    boolean is_light_on = false;
+
+    // Called from progress bar
     private void setSelectedColor(int progress_value){
+        is_light_on = progress_value > 0;
+        if (!is_light_on) {
+            setBlinkOff();
+        }
+
         int[] color_value = color_values[progress_value];
 
         int r = color_value[0];
@@ -193,13 +176,14 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         setSelectedColor(r, g, b);
     }
 
+    // called from gyroscope and progress bar function
     private void setSelectedColor(int r, int g, int b) {
         setSelectedColorTextUi(r,g,b);
 
-        // TODO: Communicate across bluetooth to the light to set the color
-
+        setBluetoothColor(r,g,b);
     }
 
+    // current selected color
     int current_color = Color.BLACK;
 
     private void setSelectedColorTextUi(int r, int g, int b) {
@@ -212,9 +196,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         textview_selected_color.setText(color_name[progress_value]);
         textview_selected_color.setTextColor(current_color);
 
-        if (is_blinking) {
-            view_blink_control.setBackgroundColor(current_color);
-        }
+        view_blink_control.setBackgroundColor(is_light_on && is_blinking ? current_color : Color.BLACK);
     }
 
 
@@ -249,6 +231,11 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     public void onClick(View view) {
 
         gyroscope_on = switch_color_gyroscope_on.isChecked();
+
+        // disable seekbar when gyroscope is enabled
+        seekbar_color_selector.setClickable(!gyroscope_on);
+        seekbar_color_selector.setEnabled(!gyroscope_on);
+
         switch_color_gyroscope_on.setText(String.format("Gyroscope Select: %s", gyroscope_on ? "On": "Off"));
     }
 
@@ -259,28 +246,15 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     @Override
     public void onProgressChanged(SeekBar seekbar, int progress_value, boolean from_user) {
-
         setSelectedColor(progress_value);
-        //progress = progresValue;
-        //textview_selected_color.setText(Integer.toString(progress_value));
-
-        //Toast.makeText(getApplicationContext(), "Changing seekbar's progress", Toast.LENGTH_SHORT).show();
-
     }
 
     @Override
     public void onStartTrackingTouch(SeekBar seekBar) {
-
-        //Toast.makeText(getApplicationContext(), "Started tracking seekbar", Toast.LENGTH_SHORT).show();
-
     }
 
     @Override
     public void onStopTrackingTouch(SeekBar seekBar) {
-
-        //textview_selected_color.setText(color_name[progress_value]);
-        //textView.setText("Covered: " + progress + "/" + seekBar.getMax());
-        //Toast.makeText(getApplicationContext(), "Stopped tracking seekbar", Toast.LENGTH_SHORT).show();
     }
 
     //
@@ -324,7 +298,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
                     b = Math.round(255 * p_z);
 
                     setSelectedColor(r, g, b);
-                    //textview_selected_color.setTextColor(Color.rgb(r, g, b));
 
                     Log.i("Gravity", String.format("[%f] [%f] [%f] Total: [%f] Abs Total: [%f] Percents: [%f] [%f] [%f] Color: [%d] [%d] [%d]", x, y, z, total, abs_total, p_x, p_y, p_z, r, g, b));
 
@@ -335,7 +308,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {
-
     }
 
     //
@@ -363,6 +335,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         return false;
     }
 
+    // Other unused Events
     @Override
     public boolean onDoubleTapEvent(MotionEvent motionEvent) {
         Log.i("Touch", "Double Tap Event");
@@ -376,7 +349,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     @Override
     public void onShowPress(MotionEvent motionEvent) {
-
     }
 
     @Override
@@ -391,7 +363,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     @Override
     public void onLongPress(MotionEvent motionEvent) {
-
     }
 
     @Override
