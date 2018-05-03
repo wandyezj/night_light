@@ -86,42 +86,39 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         sensor_manager.registerListener(this, sensor_gravity, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
-    private void setSelectedColorText(int progress_value){
-        textview_selected_color.setText(color_name[progress_value]);
-
+    private void setSelectedColor(int progress_value){
         int[] color_value = color_values[progress_value];
 
         int r = color_value[0];
         int g = color_value[1];
         int b = color_value[2];
 
-        if (progress_value == 0) {
-            textview_status.setText("Status: Off");
-        } else {
-            textview_status.setText("Status: On");
-        }
-
-        setSelectedColorText(r, g, b);
+        setSelectedColor(r, g, b);
     }
 
-    private void setSelectedColorText(int r, int g, int b) {
+    private void setSelectedColor(int r, int g, int b) {
+        setSelectedColorTextUi(r,g,b);
 
-        if (gyroscope_on) {
-            textview_status.setText("Status: On");
-            int color_index = GetClosestColor(r, g, b);
-            seekbar_color_selector.setProgress(color_index);
-            textview_selected_color.setText(color_name[color_index]);
-        }
+        // TODO: Communicate across bluetooth to the light to set the color
 
+    }
+
+    private void setSelectedColorTextUi(int r, int g, int b) {
+        int progress_value = GetClosestColor(r, g, b);
+        textview_status.setText(String.format("Status: %s", progress_value != 0 || gyroscope_on ? "On" : "Off"));
+
+        seekbar_color_selector.setProgress(progress_value);
+
+        textview_selected_color.setText(color_name[progress_value]);
         textview_selected_color.setTextColor(Color.rgb(r, g, b));
-
     }
+
 
     private int GetClosestColor(int r, int g, int b) {
 
         int best_index = 0;
         int best_value = 255 + 255 + 255;
-        for(int index = 1; index < color_values.length; index++){
+        for(int index = 0; index < color_values.length; index++){
             int[] color_value = color_values[index];
             int c_r = color_value[0];
             int c_g = color_value[1];
@@ -159,7 +156,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     @Override
     public void onProgressChanged(SeekBar seekbar, int progress_value, boolean from_user) {
 
-        setSelectedColorText(progress_value);
+        setSelectedColor(progress_value);
         //progress = progresValue;
         //textview_selected_color.setText(Integer.toString(progress_value));
 
@@ -222,7 +219,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
                     g = Math.round(255 * p_y);
                     b = Math.round(255 * p_z);
 
-                    setSelectedColorText(r, g, b);
+                    setSelectedColor(r, g, b);
                     //textview_selected_color.setTextColor(Color.rgb(r, g, b));
 
                     Log.i("Gravity", String.format("[%f] [%f] [%f] Total: [%f] Abs Total: [%f] Percents: [%f] [%f] [%f] Color: [%d] [%d] [%d]", x, y, z, total, abs_total, p_x, p_y, p_z, r, g, b));
