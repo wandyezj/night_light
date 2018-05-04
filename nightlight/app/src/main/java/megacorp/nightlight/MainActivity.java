@@ -145,6 +145,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         setBluetoothBlinkOff();
     }
 
+    // Functions that will communicate over bluetooth to adjust the color
     private void setBluetoothBlinkOn() {
         // TODO: Communicate across bluetooth to the light to set the blink
     }
