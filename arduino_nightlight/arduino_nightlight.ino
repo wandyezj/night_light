@@ -384,102 +384,115 @@ shade GetLoopSensorLightShade()
 }
 
 
+
+// Output Controls
+// what should be done according to the sets of controls
+bool use_hardware_override = true;
+
+shade control_shade = shade::DARK; // shade always based of light level sensor
+
+bool control_hardware_blink = false; // hardware is not allowed to blink
+color control_hardware_color = color::OFF;
+
+bool control_bluetooth_blink = false;
+color control_bluetooth_color = color::OFF;
+
+
+bool output_blink = false;
+color output_color = color::OFF;
+shade output_shade = shade::DARK;
+
+
+//
+// Take hardware sensor readings
+//
 unsigned long led_controller_last_check_time_milliseconds = 0;
 const unsigned long led_controller_check_period_milliseconds = 20;
 
-void LoopLedController()
+void LoopHardwareControl()
 {
   if (SufficientTimePassed(led_controller_last_check_time_milliseconds, led_controller_check_period_milliseconds))
   {
     color selected_color = GetLoopSensorSliderColor();
     shade selected_shade = GetLoopSensorLightShade();
-    //Serial.println((int)selected_color);
+  
+  // manual touching of controls overrides all
+  use_hardware_override = use_hardware_override || control_hardware_color != selected_color;
+  
+  control_hardware_color = selected_color;
+  control_shade = selected_shade;
+  
+  // Debugging
+  //Serial.println((int)selected_color);
     Serial.print(color_name[(int)selected_color]);
     Serial.print(" ");
     Serial.print(shade_name[(int)selected_shade]);
     Serial.println(" ");
-    SetLedColor(selected_color, selected_shade);
   }
 }
 
 
-
-
-void setup()
+void LoopBluetoothControl()
 {
-  Serial.begin(9600);
-
-  pinMode(pin_blink, OUTPUT);
-
-  pinMode(pin_red, OUTPUT);
-  pinMode(pin_green, OUTPUT);
-  pinMode(pin_blue, OUTPUT);
-
-  RGB.control(true);
+  // TODO add bluetooth commands
+  
 }
 
 
-// Commands
+
+void LoopConfigureLed()
+{
+  output_blink = control_bluetooth_blink;
+  output_color = control_bluetooth_color;
+  output_shade = control_shade;
+  
+  if(use_hardware_override)
+  {
+    output_blink = control_hardware_blink;
+    output_color = control_hardware_color;
+    output_shade = control_shade;
+  }
+}
+
+//
+// The LED output controler
+//
+
+bool in_blink = false;
+unsigned long led_controller_last_blink_check_time_milliseconds = 0;
+const unsigned long led_controller_blink_period_milliseconds = 1000;
+
+void LoopLedController()
+{
+  color selected_color = output_color;
+  shade selected_shade = output_shade;
+  
+  // flip between on and off
+  if (SufficientTimePassed(led_controller_last_blink_check_time_milliseconds, led_controller_blink_period_milliseconds))
+  {
+    in_blink = !in_blink;
+  }
+  
+  if (in_blink && output_blink)
+  {
+    selected_color = color::OFF;
+  }
+  
+    SetLedColor(selected_color, selected_shade);
+}
+
+
+
+
+
+//
+// Debug
+//
+
+// Debug Commands
 bool do_blink = false;
 bool do_board_color_cycle = false;
 bool do_debug_rgb = false;
-
-void loop()
-{
-  LoopLedController();
-
-
-/*
-  for (byte c = 0; c < color::COLOR_COUNT; c++)
-  {
-    for (byte s = 0; s < shade::SHADE_COUNT; s++)
-    {
-      SetBoardLedColor((color)c, (shade)s);
-      SetLedColor((color)c, (shade)s);
-      delay(500);
-    }
-  }
-  SetBoardLedColor(color::OFF);
-  SetLedColor(color::OFF);
-  //*/  
-
-  if (do_debug_rgb)
-  {
-    SetBoardLedColor(color::RED);
-    SetLedColor(color::RED);
-    delay(2000);
-  
-    SetBoardLedColor(color::GREEN);
-    SetLedColor(color::GREEN);
-    delay(2000);
-      
-    SetBoardLedColor(color::BLUE);
-    SetLedColor(color::BLUE);
-    delay(2000);
-  }
-
-
-  if (do_board_color_cycle)
-  {
-    for (byte i = 0; i < color::COLOR_COUNT; i++)
-    {
-        SetBoardLedColor((color)i);
-        delay(500);
-    }
-    SetBoardLedColor(color::OFF);
-  }
-
-
-  // Controls circuit
-  if (do_blink)
-  {
-    digitalWrite(pin_blink, HIGH);
-    delay(1000);
-    digitalWrite(pin_blink, LOW);
-    delay(1000);
-  }
-}
-
 
 
 String input_command = ""; // a String to hold incoming data
@@ -564,3 +577,83 @@ void serialEvent()
     }
   }
 }
+
+
+//
+// Main Loops
+//
+
+void setup()
+{
+  Serial.begin(9600);
+
+  pinMode(pin_blink, OUTPUT);
+
+  pinMode(pin_red, OUTPUT);
+  pinMode(pin_green, OUTPUT);
+  pinMode(pin_blue, OUTPUT);
+
+  RGB.control(true);
+}
+
+void loop()
+{
+  LoopHardwareControl();
+  LoopBluetoothControl();
+  LoopConfigureLed();
+  LoopLedController();
+
+
+/*
+  for (byte c = 0; c < color::COLOR_COUNT; c++)
+  {
+    for (byte s = 0; s < shade::SHADE_COUNT; s++)
+    {
+      SetBoardLedColor((color)c, (shade)s);
+      SetLedColor((color)c, (shade)s);
+      delay(500);
+    }
+  }
+  SetBoardLedColor(color::OFF);
+  SetLedColor(color::OFF);
+  //*/  
+
+  if (do_debug_rgb)
+  {
+    SetBoardLedColor(color::RED);
+    SetLedColor(color::RED);
+    delay(2000);
+  
+    SetBoardLedColor(color::GREEN);
+    SetLedColor(color::GREEN);
+    delay(2000);
+      
+    SetBoardLedColor(color::BLUE);
+    SetLedColor(color::BLUE);
+    delay(2000);
+  }
+
+
+  if (do_board_color_cycle)
+  {
+    for (byte i = 0; i < color::COLOR_COUNT; i++)
+    {
+        SetBoardLedColor((color)i);
+        delay(500);
+    }
+    SetBoardLedColor(color::OFF);
+  }
+
+
+  // Controls circuit
+  if (do_blink)
+  {
+    digitalWrite(pin_blink, HIGH);
+    delay(1000);
+    digitalWrite(pin_blink, LOW);
+    delay(1000);
+  }
+}
+
+
+
