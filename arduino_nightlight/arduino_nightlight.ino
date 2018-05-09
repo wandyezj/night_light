@@ -1,71 +1,3 @@
-/*
-   Copyright (c) 2016 RedBear
-
-   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
-   to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
-   and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-   The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-   IN THE SOFTWARE.
-*/
-
-/*
-   Defaultly disabled. More details: https://docs.particle.io/reference/firmware/photon/#system-thread
-*/
-//SYSTEM_THREAD(ENABLED);
-
-/*
-   Defaultly disabled. If BLE setup is enabled, when the Duo is in the Listening Mode, it will de-initialize and re-initialize the BT stack.
-   Then it broadcasts as a BLE peripheral, which enables you to set up the Duo via BLE using the RedBear Duo App or customized
-   App by following the BLE setup protocol: https://github.com/redbear/Duo/blob/master/docs/listening_mode_setup_protocol.md#ble-peripheral
-
-   NOTE: If enabled and upon/after the Duo enters/leaves the Listening Mode, the BLE functionality in your application will not work properly.
-*/
-//BLE_SETUP(ENABLED);
-
-/*
-   SYSTEM_MODE:
-       - AUTOMATIC: Automatically try to connect to Wi-Fi and the Particle Cloud and handle the cloud messages.
-       - SEMI_AUTOMATIC: Manually connect to Wi-Fi and the Particle Cloud, but automatically handle the cloud messages.
-       - MANUAL: Manually connect to Wi-Fi and the Particle Cloud and handle the cloud messages.
-
-   SYSTEM_MODE(AUTOMATIC) does not need to be called, because it is the default state.
-   However the user can invoke this method to make the mode explicit.
-   Learn more about system modes: https://docs.particle.io/reference/firmware/photon/#system-modes .
-*/
-#if defined(ARDUINO)
-SYSTEM_MODE(SEMI_AUTOMATIC);
-#endif
-
-/*
-Notes:
-  * Sensor readings can be slightly different each time, and there can be blips of random high or low values.
-  To make sure that there is a 'constant' value, make sure that a number of readings in a row have the same value.
-
-  * The slider input voltage should be stepped down with a couple (3) 10K ohm resistors to put the voltage in readable range.
-  
-  * The photo resistor works well with a 2.2k ohm resistor 
-*/
-
-//
-// Pins
-//
-
-const int pin_blink = D0;
-
-const int pin_red = D1;
-const int pin_green = D2;
-const int pin_blue = D3;
-
-const int pin_sensor_slider_in = A0;
-const int pin_sensor_slider_out = A1;
-
-const int pin_sensor_light_in = A4;
-const int pin_sensor_light_out = A5;
 
 //
 // Color and shade constants
@@ -155,6 +87,209 @@ String shade_name[shade::SHADE_COUNT] =
   "seven",
   "dark"
 };
+
+
+// Output Controls - Critical for teh entire program
+// what should be done according to the sets of controls
+bool use_hardware_override = true;
+
+shade control_shade = shade::DARK; // shade always based of light level sensor
+
+bool control_hardware_blink = false; // hardware is not allowed to blink
+color control_hardware_color = color::OFF;
+
+bool control_bluetooth_blink = false;
+color control_bluetooth_color = color::OFF;
+
+
+bool output_blink = false;
+color output_color = color::OFF;
+shade output_shade = shade::DARK;
+
+//
+
+#include "ble_config.h"
+
+/*
+ * Simple Bluetooth Demo
+ * This code shows that the user can send simple digital write data from the
+ * Android app to the Duo board.
+ * Created by Liang He, April 27th, 2018
+ * 
+ * The Library is created based on Bjorn's code for RedBear BLE communication: 
+ * https://github.com/bjo3rn/idd-examples/tree/master/redbearduo/examples/ble_led
+ * 
+ * Our code is created based on the provided example code (Simple Controls) by the RedBear Team:
+ * https://github.com/RedBearLab/Android
+ */
+
+#if defined(ARDUINO) 
+SYSTEM_MODE(SEMI_AUTOMATIC); 
+#endif
+
+#define RECEIVE_MAX_LEN    3
+#define BLE_SHORT_NAME_LEN 0x08 // must be in the range of [0x01, 0x09]
+#define BLE_SHORT_NAME 'A','A','A','h','o','m','e'  // define each char but the number of char should be BLE_SHORT_NAME_LEN-1
+
+// UUID is used to find the device by other BLE-abled devices
+static uint8_t service1_uuid[16]    = { 0x71,0x3d,0x00,0x00,0x50,0x3e,0x4c,0x75,0xba,0x94,0x31,0x48,0xf1,0x8d,0x94,0x1e };
+static uint8_t service1_tx_uuid[16] = { 0x71,0x3d,0x00,0x03,0x50,0x3e,0x4c,0x75,0xba,0x94,0x31,0x48,0xf1,0x8d,0x94,0x1e };
+
+// Define the configuration data
+static uint8_t adv_data[] = {
+  0x02,
+  BLE_GAP_AD_TYPE_FLAGS,
+  BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE, 
+  
+  BLE_SHORT_NAME_LEN,
+  BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME,
+  BLE_SHORT_NAME, 
+  
+  0x11,
+  BLE_GAP_AD_TYPE_128BIT_SERVICE_UUID_COMPLETE,
+  0x1e,0x94,0x8d,0xf1,0x48,0x31,0x94,0xba,0x75,0x4c,0x3e,0x50,0x00,0x00,0x3d,0x71 
+};
+
+// Define the receive and send handlers
+static uint16_t receive_handle = 0x0000; // recieve
+
+static uint8_t receive_data[RECEIVE_MAX_LEN] = { 0x01 };
+
+/**
+ * @brief Callback for writing event.
+ *
+ * @param[in]  value_handle  
+ * @param[in]  *buffer       The buffer pointer of writting data.
+ * @param[in]  size          The length of writting data.   
+ *
+ * @retval 
+ */
+int bleWriteCallback(uint16_t value_handle, uint8_t *buffer, uint16_t size) {
+  Serial.print("Write value handler: ");
+  Serial.println(value_handle, HEX);
+
+  if (receive_handle == value_handle) {
+    memcpy(receive_data, buffer, RECEIVE_MAX_LEN);
+    Serial.print("Write value: ");
+    for (uint8_t index = 0; index < RECEIVE_MAX_LEN; index++) {
+      Serial.print(receive_data[index], HEX);
+      Serial.print(" ");
+    }
+    Serial.println(" ");
+    
+    /* Process the data
+     * TODO: Receive the data sent from other BLE-abled devices (e.g., Android app)
+     * and process the data for different purposes (digital write, digital read, analog read, PWM write)
+     */
+    if (receive_data[0] == 0x01) { // Command is to control digital out pin
+      if (receive_data[1] == 0x01)
+        Serial.println("Ble High");
+        //digitalWrite(DIGITAL_OUT_PIN, HIGH);
+      else 
+      {
+        Serial.println("Ble Low");
+        //digitalWrite(DIGITAL_OUT_PIN, LOW);
+      }
+        
+    }
+    else if (receive_data[0] == 0x02)
+    {
+      if (receive_data[1] == 0x01)
+      {
+        Serial.println("Ble Blink On");
+        control_bluetooth_blink = true;
+        use_hardware_override = false;
+      }
+      else
+      {
+        Serial.println("Ble Blink Off");
+        control_bluetooth_blink = false;
+        use_hardware_override = false;
+      }
+    }
+    else if (receive_data[0] == 0x03)
+    {
+      int color_index = (int)receive_data[1];
+      Serial.print("Ble Color: ");
+      Serial.println(color_index);
+      control_bluetooth_color = (color) color_index;
+      use_hardware_override = false;
+    }
+    else if (receive_data[0] == 0x04)
+    { 
+      // Command is to initialize all.
+      Serial.println("Ble Initialize All");
+      //digitalWrite(DIGITAL_OUT_PIN, LOW);
+    }
+  }
+  return 0;
+}
+
+void BleSetup()
+{
+  //Serial.begin(115200);
+  delay(5000);
+  
+  Serial.println("Simple Digital Out Demo.");
+
+  // Initialize ble_stack.
+  ble.init();
+  configureBLE(); //lots of standard initialization hidden in here - see ble_config.cpp
+  // Set BLE advertising data
+  ble.setAdvertisementData(sizeof(adv_data), adv_data);
+
+  // Register BLE callback functions
+  ble.onDataWriteCallback(bleWriteCallback);
+
+  // Add user defined service and characteristics
+  ble.addService(service1_uuid);
+  receive_handle = ble.addCharacteristicDynamic(service1_tx_uuid, ATT_PROPERTY_NOTIFY|ATT_PROPERTY_WRITE|ATT_PROPERTY_WRITE_WITHOUT_RESPONSE, receive_data, RECEIVE_MAX_LEN);
+  
+  // BLE peripheral starts advertising now.
+  ble.startAdvertising();
+  Serial.println("BLE start advertising.");
+}
+
+/*
+void setup() {
+  Serial.begin(115200);
+  //delay(5000);
+
+  BleSetup();
+
+  pinMode(DIGITAL_OUT_PIN, OUTPUT);
+}
+*/
+
+// Rest of the code
+
+
+/*
+Notes:
+  * Sensor readings can be slightly different each time, and there can be blips of random high or low values.
+  To make sure that there is a 'constant' value, make sure that a number of readings in a row have the same value.
+
+  * The slider input voltage should be stepped down with a couple (3) 10K ohm resistors to put the voltage in readable range.
+  
+  * The photo resistor works well with a 2.2k ohm resistor 
+*/
+
+//
+// Pins
+//
+
+const int pin_blink = D0;
+
+const int pin_red = D1;
+const int pin_green = D2;
+const int pin_blue = D3;
+
+const int pin_sensor_slider_in = A0;
+const int pin_sensor_slider_out = A1;
+
+const int pin_sensor_light_in = A4;
+const int pin_sensor_light_out = A5;
+
 
 void ColorShade(byte &r, byte &g, byte &b, color c, shade s)
 {
@@ -385,23 +520,6 @@ shade GetLoopSensorLightShade()
 
 
 
-// Output Controls
-// what should be done according to the sets of controls
-bool use_hardware_override = true;
-
-shade control_shade = shade::DARK; // shade always based of light level sensor
-
-bool control_hardware_blink = false; // hardware is not allowed to blink
-color control_hardware_color = color::OFF;
-
-bool control_bluetooth_blink = false;
-color control_bluetooth_color = color::OFF;
-
-
-bool output_blink = false;
-color output_color = color::OFF;
-shade output_shade = shade::DARK;
-
 
 //
 // Take hardware sensor readings
@@ -424,10 +542,12 @@ void LoopHardwareControl()
   
   // Debugging
   //Serial.println((int)selected_color);
+  /*
     Serial.print(color_name[(int)selected_color]);
     Serial.print(" ");
     Serial.print(shade_name[(int)selected_shade]);
     Serial.println(" ");
+    */
   }
 }
 
@@ -586,6 +706,8 @@ void serialEvent()
 void setup()
 {
   Serial.begin(9600);
+
+  BleSetup();
 
   pinMode(pin_blink, OUTPUT);
 
