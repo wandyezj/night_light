@@ -62,7 +62,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     private TextView mDeviceName = null;
     private TextView mRssiValue = null;
     private TextView mUUID = null;
-    private ToggleButton mDigitalOutBtn;
     private String mBluetoothDeviceName = "";
     private String mBluetoothDeviceUUID = "";
 
@@ -106,8 +105,8 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     private void setButtonDisable() {
         flag = false;
+        enableBluetoothControl(flag);
         mConnState = false;
-        mDigitalOutBtn.setEnabled(flag);
         mConnectBtn.setText("Connect");
         mRssiValue.setText("");
         mDeviceName.setText("");
@@ -116,8 +115,8 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
     private void setButtonEnable() {
         flag = true;
+        enableBluetoothControl(flag);
         mConnState = true;
-        mDigitalOutBtn.setEnabled(flag);
         mConnectBtn.setText("Disconnect");
     }
 
@@ -272,7 +271,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         mConnectBtn = (Button) findViewById(R.id.connectBtn);
         mDeviceName = (TextView) findViewById(R.id.deviceName);
         mRssiValue = (TextView) findViewById(R.id.rssiValue);
-        mDigitalOutBtn = (ToggleButton) findViewById(R.id.DOutBtn);
         mUUID = (TextView) findViewById(R.id.uuidValue);
 
         // Connection button click event
@@ -321,27 +319,6 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
                 }
             }
         });
-
-        // Send data to Duo board
-        // It has three bytes: maker, data value, reserved
-        mDigitalOutBtn.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-
-
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView,
-                                         boolean isChecked) {
-                byte buf[] = new byte[] { (byte) 0x01, (byte) 0x00, (byte) 0x00 };
-
-                if (isChecked == true)
-                    buf[1] = 0x01;
-                else
-                    buf[1] = 0x00;
-
-                mCharacteristicTx.setValue(buf);
-                mBluetoothLeService.writeCharacteristic(mCharacteristicTx);
-            }
-        });
-
 
         // Bluetooth setup. Created by the RedBear team.
         if (!getPackageManager().hasSystemFeature(
@@ -510,6 +487,12 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         blink_animation.setRepeatCount(Animation.INFINITE);
     }
 
+    private boolean bluetooth_enabled = false;
+    private void enableBluetoothControl(boolean flag){
+        bluetooth_enabled = flag;
+    }
+
+
     boolean is_blinking = false;
 
 
@@ -545,8 +528,10 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
     }
 
     private void sendBluetoothMessage(byte[] message) {
-        mCharacteristicTx.setValue(message);
-        mBluetoothLeService.writeCharacteristic(mCharacteristicTx);
+        if (bluetooth_enabled) {
+            mCharacteristicTx.setValue(message);
+            mBluetoothLeService.writeCharacteristic(mCharacteristicTx);
+        }
     }
 
     // Functions that will communicate over bluetooth to adjust the color
